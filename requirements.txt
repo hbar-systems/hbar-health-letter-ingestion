@@ -1,0 +1,26 @@
+# Web framework
+fastapi
+uvicorn[standard]
+
+# File upload support (required by FastAPI)
+python-multipart
+
+# Environment variables
+python-dotenv
+
+# Claude API
+anthropic
+
+# PDF text extraction (digital PDFs)
+pdfplumber
+
+# OCR fallback (scanned PDFs)
+# Requires system dependencies:
+#   macOS:  brew install tesseract tesseract-lang poppler
+#   Ubuntu: apt-get install tesseract-ocr tesseract-ocr-deu poppler-utils
+pytesseract
+pdf2image
+Pillow
+
+# Test data generation only (not needed at runtime)
+# pip install reportlab   — only required to run create_test_pdf.py
