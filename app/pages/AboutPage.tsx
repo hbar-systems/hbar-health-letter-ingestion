@@ -13,8 +13,13 @@ export function AboutPage() {
         <h2>What it does</h2>
         <ul>
           <li>
-            Reads a digital PDF letter (Entlassbrief, Verlegungsbrief,
-            Arztbrief) — text is extracted in your browser, never uploaded.
+            Reads a PDF letter (Entlassbrief, Verlegungsbrief, Arztbrief) —
+            digital or scanned. Text is extracted in your browser, never
+            uploaded.
+          </li>
+          <li>
+            Scanned / image-only PDFs are read with on-device OCR
+            (tesseract.js, German) — also entirely in the browser.
           </li>
           <li>
             Asks the brain to return a structured summary: patient, sender,
@@ -34,8 +39,8 @@ export function AboutPage() {
           <li>Does not diagnose, triage, or make clinical decisions.</li>
           <li>Does not store letters or summaries — nothing is persisted.</li>
           <li>
-            Does not read scanned / image-only PDFs in this version — only
-            PDFs with a real text layer. OCR is a planned follow-up.
+            Does not send anything to a CDN or third party — the OCR engine
+            and language model are bundled with the app.
           </li>
           <li>No chat, no free-form input.</li>
         </ul>

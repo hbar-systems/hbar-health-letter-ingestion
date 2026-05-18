@@ -21,15 +21,22 @@ system dependencies:
 1. **PDF text extraction** runs client-side, in the browser, via
    [pdf.js](https://mozilla.github.io/pdf.js/) (Apache-2.0). The file itself
    is never uploaded.
-2. **Summarization and translation** go through the `llm.complete` bridge
+2. **Scanned / image-only PDFs** are read with on-device OCR — pdf.js
+   rasterizes each page and [tesseract.js](https://tesseract.projectnaptha.com/)
+   (Apache-2.0, WASM port of Tesseract) recognizes the text. The OCR engine,
+   WASM core, and German language model are vendored in `public/tesseract/`
+   and served from the app's own bundle — nothing is fetched from a CDN.
+3. **Summarization and translation** go through the `llm.complete` bridge
    intent — the app posts the extracted text to the host brain, which
    generates the summary on the operator's BYOK model, RAG-retrieving over the
    practice corpus.
 
-It was originally a standalone FastAPI app (pdfplumber + Tesseract OCR + a
+It was originally a standalone FastAPI app (pdfplumber + native Tesseract + a
 direct Anthropic call). That shape cannot install into a brain — brains run on
-small ARM VMs with no pip/npm at install time — so it was re-architected as a
+small ARM VMs with no pip/apt at install time — so it was re-architected as a
 pure frontend, mirroring the Arztbrief app (`systems/hbar.health/repos/app`).
+The native Tesseract dependency is replaced by the WASM build, which ships
+inside the bundle.
 
 ## Install
 
@@ -58,22 +65,25 @@ brain-app.yaml   – manifest (id, tab, permissions, ui_bundle)
 index.html       – Vite entry
 app/
   main.tsx        – router, shell, upload/loading/result/error views
-  pdfExtract.ts   – client-side PDF text extraction (pdf.js)
+  pdfExtract.ts   – PDF open: text-layer extraction + page rasterization
+  ocr.ts          – on-device OCR for scanned PDFs (tesseract.js)
   brainBridge.ts  – llm.complete postMessage client
   summarize.ts    – orchestration: text -> brain -> summary / translation
   prompts.ts      – summarize + translate instructions
   sections.ts     – section model + tolerant summary parser
   styles.css      – UI styles
   pages/          – About, Legal
+public/tesseract/ – vendored OCR assets (WASM core, worker, deu model)
 dist/            – built static bundle (committed; the ui_bundle)
 test_data/       – synthetic Entlassbrief (digital PDF, fictional patient)
 ```
 
 ## Scope
 
-- **v0 reads digital (text-layer) PDFs only.** Scanned / image-only PDFs yield
-  no text and are reported as such. OCR is a v1 follow-up — Tesseract is a
-  system dependency and cannot ship in a brain-app.
-- No patient data is stored. The PDF is parsed in-browser; the extracted text
-  is sent to the brain only as the prompt body and is not persisted.
+- **Digital and scanned PDFs.** A digital text layer is used directly; when
+  it is absent (a scan), each page is OCR'd in the browser. OCR is capped at
+  20 pages and uses the German (`deu`) model.
+- No patient data is stored, and nothing is sent to a CDN. The PDF is parsed
+  in-browser; the extracted text is sent only to the brain, as the prompt
+  body, and is not persisted.
 - Not for diagnosis, EHR integration, production use, or real patient data.
