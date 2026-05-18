@@ -1,24 +1,11 @@
-# Environment — never commit API keys
-.env
+# Dependencies
+node_modules/
 
-# Python
+# Secrets / legacy local Python env — never commit
+.env
 .venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.pyw
-*.pyz
-.Python
-env/
-venv/
-.venv/
-ENV/
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
 
 # macOS
 .DS_Store
@@ -30,6 +17,10 @@ build/
 .idea/
 *.swp
 *.swo
+
+# dist/ is intentionally NOT ignored. The built static bundle is the
+# brain-app `ui_bundle` — the install pipeline clones this repo and serves
+# dist/ directly, so it must be committed. Rebuild with `npm run build`.
 
 # Test artifacts
 # (synthetic_entlassbrief.pdf is intentionally tracked — no real patient data)
