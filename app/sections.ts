@@ -1,24 +1,30 @@
 /**
- * Section model for the clinical summary, plus a tolerant parser.
+ * Section model for the structured clinical summary (the "Befund-Karte"),
+ * plus a tolerant parser.
  *
  * The summary comes back from the brain — which runs under its own persona —
- * so it may not reproduce the requested headers byte-for-byte. The parser
- * detects header lines by normalized, alias-based matching (English + likely
- * German equivalents) and captures each body up to the next header. If no
- * section is recognized at all, the caller falls back to rendering raw text.
+ * so it may not reproduce the requested headers byte-for-byte, and it will not
+ * always emit every section (e.g. Aufenthaltszeitraum only exists for a
+ * discharge letter). The parser detects header lines by normalized, alias-based
+ * matching (the German headers we request, plus likely variants and the older
+ * English forms) and captures each body up to the next header. Only the
+ * sections actually present are rendered; if none is recognized, the caller
+ * falls back to rendering the raw text.
  */
 
 export type SectionKey =
+  | "absender"
   | "patient"
-  | "receivedFrom"
-  | "diagnoses"
-  | "medications"
-  | "action"
-  | "flags";
+  | "aufenthalt"
+  | "diagnosen"
+  | "therapie"
+  | "medikation"
+  | "procedere"
+  | "offen";
 
 export interface SectionDef {
   key: SectionKey;
-  /** Display label in the result view. */
+  /** Display label in the Befund-Karte. */
   label: string;
   /** Lowercased header forms to match against. */
   aliases: string[];
@@ -26,48 +32,76 @@ export interface SectionDef {
 
 export const SECTIONS: SectionDef[] = [
   {
+    key: "absender",
+    label: "Absender",
+    aliases: ["absender", "absendende klinik", "absendende einrichtung", "einsender", "sender", "received from"],
+  },
+  {
     key: "patient",
     label: "Patient",
-    aliases: ["patient", "patientin"],
+    aliases: ["patient", "patientin", "patient/in"],
   },
   {
-    key: "receivedFrom",
-    label: "Received from",
-    aliases: ["received from", "received", "absender", "von", "sender"],
+    key: "aufenthalt",
+    label: "Aufenthaltszeitraum",
+    aliases: ["aufenthaltszeitraum", "aufenthalt", "stationärer aufenthalt", "behandlungszeitraum"],
   },
   {
-    key: "diagnoses",
-    label: "Primary diagnoses",
-    aliases: ["primary diagnoses", "diagnoses", "diagnosen", "hauptdiagnosen", "diagnose"],
+    key: "diagnosen",
+    label: "Hauptdiagnosen",
+    aliases: ["hauptdiagnosen", "hauptdiagnose", "diagnosen", "diagnose", "primary diagnoses", "diagnoses"],
   },
   {
-    key: "medications",
-    label: "Current medications",
+    key: "therapie",
+    label: "Therapie / Maßnahmen",
     aliases: [
-      "current medications at discharge/referral",
-      "current medications",
-      "medications",
-      "medikation",
-      "medikamente",
-      "entlassmedikation",
+      "therapie / maßnahmen",
+      "therapie / massnahmen",
+      "therapie und maßnahmen",
+      "therapie",
+      "maßnahmen",
+      "massnahmen",
+      "durchgeführte maßnahmen",
+      "behandlung",
     ],
   },
   {
-    key: "action",
-    label: "Action required by GP",
+    key: "medikation",
+    label: "Medikation bei Entlassung",
     aliases: [
-      "action required by gp",
-      "action required",
+      "medikation bei entlassung",
+      "entlassmedikation",
+      "medikation bei entlassung/überweisung",
+      "medikation",
+      "medikamente",
+      "current medications",
+    ],
+  },
+  {
+    key: "procedere",
+    label: "Empfohlenes Procedere für die Hausärztin/den Hausarzt",
+    aliases: [
+      "empfohlenes procedere für die hausärztin/den hausarzt",
+      "empfohlenes procedere",
+      "empfohlenes vorgehen",
       "weiteres vorgehen",
       "procedere",
       "prozedere",
       "empfehlungen",
+      "action required by gp",
     ],
   },
   {
-    key: "flags",
-    label: "Flags",
-    aliases: ["flags", "hinweise", "auffälligkeiten", "warnungen"],
+    key: "offen",
+    label: "Offene Punkte / Anschlussbedarf",
+    aliases: [
+      "offene punkte / anschlussbedarf",
+      "offene punkte",
+      "anschlussbedarf",
+      "offene fragen",
+      "hinweise",
+      "flags",
+    ],
   },
 ];
 
@@ -75,7 +109,11 @@ export type ParsedSummary = Partial<Record<SectionKey, string>>;
 
 /**
  * Is this line a section header? Strip markdown noise and a trailing colon,
- * then match the whole normalized line (or "<alias> /…") against the aliases.
+ * then match the normalized line against the aliases. A match is exact, or a
+ * word-boundary prefix (alias followed by a space or a slash) — so a short
+ * alias like "empfohlenes procedere" still catches the full
+ * "Empfohlenes Procedere für die Hausärztin/den Hausarzt" header, while
+ * "diagnose" does not swallow "Diagnosen" mid-word.
  */
 function headerKey(line: string): SectionKey | null {
   const norm = line
@@ -83,11 +121,13 @@ function headerKey(line: string): SectionKey | null {
     .replace(/[*:#\s]+$/, "")
     .trim()
     .toLowerCase();
-  if (!norm || norm.length > 52) return null;
+  if (!norm || norm.length > 64) return null;
   for (const s of SECTIONS) {
     for (const a of s.aliases) {
-      if (norm === a || norm.startsWith(a + " /") || norm.startsWith(a + "/")) {
-        return s.key;
+      if (norm === a) return s.key;
+      if (norm.startsWith(a)) {
+        const rest = norm.slice(a.length);
+        if (rest.startsWith(" ") || rest.startsWith("/")) return s.key;
       }
     }
   }
@@ -116,9 +156,4 @@ export function parseSummary(raw: string): ParsedSummary {
     if (body) out[s.key] = body;
   }
   return out;
-}
-
-/** True when the FLAGS section is empty or an explicit "none". */
-export function isNoFlags(body: string | undefined): boolean {
-  return !body || /^(none|keine)\.?$/i.test(body.trim());
 }

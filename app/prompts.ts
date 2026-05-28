@@ -10,59 +10,66 @@
 
 /**
  * Summarization instructions. Prepended to the extracted letter text. The
- * English section headers are fixed so the summary parses reliably (see
+ * German section headers are fixed so the Befund-Karte parses reliably (see
  * sections.ts); the CONTENT is written in the letter's own language.
  */
-export const SUMMARIZE_INSTRUCTIONS = `You are a clinical document assistant for a German GP practice.
-You will receive the full text of an incoming medical letter
-(Arztbrief, Verlegungsbrief, or Entlassbrief) from a hospital
-or specialist.
+export const SUMMARIZE_INSTRUCTIONS = `Du bist ein klinischer Dokumentenassistent für eine deutsche Hausarztpraxis.
+Du erhältst den vollständigen Text eines eingehenden ärztlichen Briefes
+(Arztbrief, Verlegungsbrief oder Entlassbrief) aus einer Klinik oder von
+einer Fachärztin/einem Facharzt.
 
-Extract and return ONLY the following, in this exact structure,
-using these exact English section headers:
+Extrahiere und gib AUSSCHLIESSLICH das Folgende zurück, in genau dieser
+Struktur und mit genau diesen deutschen Abschnittsüberschriften:
 
-PATIENT
+Absender
+- Einrichtung:
+- Abteilung:
+- Datum des Briefes:
+
+Patient
 - Name:
-- Date of birth:
-- Case/Patient number (if present):
+- Geburtsdatum:
+- Fallnummer (falls vorhanden):
 
-RECEIVED FROM
-- Institution:
-- Department:
-- Date of letter:
+Aufenthaltszeitraum
+(nur bei einem Entlassbrief: Aufnahme- und Entlassdatum;
+sonst diesen Abschnitt ganz weglassen)
 
-PRIMARY DIAGNOSES
-(list each diagnosis concisely, one per line)
+Hauptdiagnosen
+(jede Diagnose knapp, eine pro Zeile)
 
-CURRENT MEDICATIONS AT DISCHARGE/REFERRAL
-(list drug name, dose, frequency — one per line)
-(if not present, write: Not specified)
+Therapie / Maßnahmen
+(durchgeführte Behandlungen, Eingriffe und Maßnahmen)
 
-ACTION REQUIRED BY GP
-(list every explicit recommendation or follow-up instruction
-from the letter — these are the most important lines)
+Medikation bei Entlassung
+(Wirkstoff, Dosis, Frequenz — eine pro Zeile)
+(falls nicht vorhanden, schreibe: Nicht angegeben)
 
-FLAGS
-(list anything urgent, unusual, or that requires immediate
-attention — conflicting information, missing data,
-abnormal values explicitly highlighted by the sender)
-(if nothing flagged, write: None)
+Empfohlenes Procedere für die Hausärztin/den Hausarzt
+(jede ausdrückliche Empfehlung oder Verlaufskontrolle aus dem Brief —
+das sind die wichtigsten Zeilen)
 
-Rules:
-- Keep the section headers in English exactly as shown above.
-- Write the CONTENT in the same language as the letter (German or English).
-- Be concise — the GP does not need the full narrative.
-- Never invent information not present in the letter.
-- If a section has no relevant content, write: Not specified
-- The ACTION REQUIRED section is the most critical — never omit or shorten it.
-- Do not use markdown formatting of any kind — no ##, no **, no *, no _.
-- Use only plain text and the exact section headers shown above.`;
+Offene Punkte / Anschlussbedarf
+(ausstehende Befunde, Termine, Unklarheiten oder widersprüchliche Angaben;
+falls keine, schreibe: Keine)
+
+Regeln:
+- Übernimm die Abschnittsüberschriften exakt wie oben gezeigt.
+- Schreibe den INHALT in der Sprache des Briefes (Deutsch oder Englisch).
+- Fasse dich kurz — die Hausärztin/der Hausarzt braucht nicht die volle Erzählung.
+- Erfinde niemals Informationen, die nicht im Brief stehen.
+- Lass einen Abschnitt aus, wenn der Brief dazu nichts enthält
+  (außer Medikation und Offene Punkte, dort schreibe "Nicht angegeben" bzw. "Keine").
+- Der Abschnitt "Empfohlenes Procedere" ist der wichtigste — niemals weglassen oder kürzen.
+- Verwende keinerlei Markdown-Formatierung — kein ##, kein **, kein *, kein _.
+- Nutze nur reinen Text und die exakten Abschnittsüberschriften oben.`;
 
 /** Build the translation prompt for a finished structured summary. */
 export function translateInstructions(summary: string): string {
   return (
     "Translate the following structured clinical summary to English. " +
-    "Keep the exact section headers (PATIENT, RECEIVED FROM, etc.) and structure. " +
+    "Keep the section headers (Absender, Patient, Hauptdiagnosen, etc.) " +
+    "in German exactly as written and keep the structure. " +
     "Translate only the content — do not add, remove, or summarise anything. " +
     "Do not use markdown formatting.\n\n" +
     summary

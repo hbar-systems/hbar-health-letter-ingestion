@@ -18,7 +18,7 @@ import { loadPdf, isThin, type LoadedPdf } from "./pdfExtract";
 import { ocrPdf } from "./ocr";
 import { summarizeLetter, translateSummary } from "./summarize";
 import { bridgeErrorMessage } from "./brainBridge";
-import { SECTIONS, parseSummary, isNoFlags, type SectionKey } from "./sections";
+import { SECTIONS, parseSummary } from "./sections";
 import { AboutPage } from "./pages/AboutPage";
 import { LegalPage } from "./pages/LegalPage";
 import "./styles.css";
@@ -55,12 +55,32 @@ function ErrorIcon() {
   );
 }
 
-function DownloadIcon() {
+function PrintIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" strokeWidth="2" {...stroke}>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
+    <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke}>
+      <polyline points="6 9 6 2 18 2 18 9" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
+      <line x1="9" y1="17" x2="15" y2="17" />
+    </svg>
+  );
+}
+
+function ForwardIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke}>
+      <polyline points="15 17 20 12 15 7" />
+      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
     </svg>
   );
 }
@@ -91,14 +111,14 @@ function TranslateIcon() {
 // Summary rendering
 // ---------------------------------------------------------------------------
 
-function SectionContent({ body }: { body: string | undefined }) {
-  if (!body || !body.trim()) {
-    return <p className="empty">Not specified</p>;
-  }
+function SectionContent({ body }: { body: string }) {
   const lines = body
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    return <p className="empty">Nicht angegeben</p>;
+  }
   return (
     <>
       {lines.map((line, i) => (
@@ -108,33 +128,39 @@ function SectionContent({ body }: { body: string | undefined }) {
   );
 }
 
-function SummaryView({ text }: { text: string }) {
+/**
+ * The Befund-Karte — a styled clinical reading note. Renders only the sections
+ * the brain actually returned (Aufenthaltszeitraum, for instance, only appears
+ * for a discharge letter). If no section header is recognized at all, the raw
+ * summary is shown verbatim inside the same card.
+ */
+function BefundKarte({ text, generatedAt }: { text: string; generatedAt: string }) {
   const parsed = parseSummary(text);
-
-  // No recognized section headers — show the raw summary verbatim.
-  if (Object.keys(parsed).length === 0) {
-    return <div className="summary-raw">{text.trim()}</div>;
-  }
-
-  const extraClass = (key: SectionKey, body: string | undefined): string => {
-    if (key === "action") return " section-action";
-    if (key === "flags") return isNoFlags(body) ? " section-flags no-flags" : " section-flags";
-    return "";
-  };
+  const present = SECTIONS.filter((s) => parsed[s.key] !== undefined);
 
   return (
-    <div className="summary-body">
-      {SECTIONS.map((s) => {
-        const body = parsed[s.key];
-        return (
-          <div key={s.key} className={`summary-section${extraClass(s.key, body)}`}>
-            <div className="section-label">{s.label}</div>
-            <div className="section-content">
-              <SectionContent body={body} />
+    <div className="befund-karte">
+      <div className="befund-head">
+        <h2 className="befund-header">
+          Eingehender Brief — strukturierte Zusammenfassung
+        </h2>
+        {generatedAt && <div className="befund-meta">Erstellt {generatedAt}</div>}
+      </div>
+
+      {present.length === 0 ? (
+        <div className="befund-section">
+          <div className="befund-content befund-raw">{text.trim()}</div>
+        </div>
+      ) : (
+        present.map((s) => (
+          <div key={s.key} className="befund-section">
+            <div className="befund-label">{s.label}</div>
+            <div className="befund-content">
+              <SectionContent body={parsed[s.key]!} />
             </div>
           </div>
-        );
-      })}
+        ))
+      )}
     </div>
   );
 }
@@ -147,7 +173,7 @@ type View = "upload" | "loading" | "result" | "error";
 
 function HomePage() {
   const [view, setView] = useState<View>("upload");
-  const [loadingMsg, setLoadingMsg] = useState("Analysing letter…");
+  const [loadingMsg, setLoadingMsg] = useState("Brief wird analysiert…");
   const [errorMsg, setErrorMsg] = useState("");
   const [rawSummary, setRawSummary] = useState("");
   const [translated, setTranslated] = useState("");
@@ -156,8 +182,16 @@ function HomePage() {
   const [copied, setCopied] = useState(false);
   const [generatedAt, setGeneratedAt] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [toast, setToast] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2800);
+  }, []);
 
   const reset = useCallback(() => {
     setRawSummary("");
@@ -172,12 +206,12 @@ function HomePage() {
 
   const processFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setErrorMsg("Only PDF files are accepted. Please upload a .pdf file.");
+      setErrorMsg("Es werden nur PDF-Dateien akzeptiert. Bitte laden Sie eine .pdf-Datei hoch.");
       setView("error");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      setErrorMsg("File too large. Maximum size is 50 MB.");
+      setErrorMsg("Datei zu groß. Die maximale Größe beträgt 50 MB.");
       setView("error");
       return;
     }
@@ -185,14 +219,14 @@ function HomePage() {
     setRawSummary("");
     setTranslated("");
     setIsTranslated(false);
-    setLoadingMsg("Reading PDF…");
+    setLoadingMsg("PDF wird gelesen…");
     setView("loading");
 
     let pdf: LoadedPdf;
     try {
       pdf = await loadPdf(file);
     } catch {
-      setErrorMsg("Could not open this PDF. The file may be corrupt or password-protected.");
+      setErrorMsg("Dieses PDF konnte nicht geöffnet werden. Die Datei ist möglicherweise beschädigt oder passwortgeschützt.");
       setView("error");
       return;
     }
@@ -202,12 +236,12 @@ function HomePage() {
       const extracted = await pdf.extractText();
       if (extracted.tooThin) {
         // No usable text layer — scanned/image PDF. Fall back to on-device OCR.
-        setLoadingMsg("Scanned PDF — preparing OCR…");
+        setLoadingMsg("Gescanntes PDF — OCR wird vorbereitet…");
         letterText = await ocrPdf(
           pdf.numPages,
           (i) => pdf.renderPage(i),
           ({ page, total }) =>
-            setLoadingMsg(`Scanned PDF — reading page ${page} of ${total} with OCR…`)
+            setLoadingMsg(`Gescanntes PDF — Seite ${page} von ${total} wird per OCR gelesen…`)
         );
         if (isThin(letterText)) throw new Error("ocr_empty");
       } else {
@@ -216,8 +250,8 @@ function HomePage() {
     } catch (e) {
       const msg =
         e instanceof Error && e.message === "ocr_empty"
-          ? "No readable text could be extracted, even with OCR. The scan may be too low-quality or the page blank."
-          : "Could not extract text from this PDF.";
+          ? "Es konnte kein lesbarer Text extrahiert werden, auch nicht per OCR. Der Scan ist möglicherweise zu schlecht oder die Seite leer."
+          : "Aus diesem PDF konnte kein Text extrahiert werden.";
       setErrorMsg(msg);
       setView("error");
       return;
@@ -225,7 +259,7 @@ function HomePage() {
       await pdf.destroy();
     }
 
-    setLoadingMsg("Generating clinical summary…");
+    setLoadingMsg("Klinische Zusammenfassung wird erstellt…");
     try {
       const summary = await summarizeLetter(letterText);
       setRawSummary(summary);
@@ -290,9 +324,9 @@ function HomePage() {
   if (view === "upload") {
     return (
       <div className="view-pad">
-        <div className="upload-heading">Incoming letter</div>
+        <div className="upload-heading">Eingehender Brief</div>
         <div className="upload-subheading">
-          Upload a PDF to generate a structured clinical summary.
+          PDF hochladen, um eine strukturierte klinische Zusammenfassung zu erstellen.
         </div>
         <div
           className={`drop-zone${dragOver ? " drag-over" : ""}`}
@@ -314,13 +348,14 @@ function HomePage() {
           <div className="drop-icon">
             <UploadIcon />
           </div>
-          <div className="drop-primary">Drop PDF here</div>
-          <div className="drop-secondary">
-            or <strong>click to browse</strong>
-          </div>
+          <div className="drop-primary">PDF hier ablegen oder zum Auswählen klicken.</div>
         </div>
-        <div className="file-constraints">
-          PDF · digital or scanned · Max 50 MB · Parsed in your browser, file never uploaded
+        <div className="file-note">
+          <span>Digitale PDFs werden direkt gelesen.</span>
+          <span>
+            Gescannte Briefe werden im Browser per OCR erkannt — keine Übertragung
+            an externe Dienste.
+          </span>
         </div>
       </div>
     );
@@ -333,7 +368,7 @@ function HomePage() {
         <div className="spinner" />
         <div className="loading-title">{loadingMsg}</div>
         <div className="loading-sub">
-          Text is extracted in your browser; the summary is generated by your brain.
+          Der Text wird in Ihrem Browser extrahiert; die Zusammenfassung erstellt Ihr Brain.
         </div>
       </div>
     );
@@ -346,10 +381,10 @@ function HomePage() {
         <div className="error-icon">
           <ErrorIcon />
         </div>
-        <div className="error-title">Processing failed</div>
+        <div className="error-title">Verarbeitung fehlgeschlagen</div>
         <div className="error-message">{errorMsg}</div>
         <button className="btn btn-primary" onClick={reset}>
-          Try again
+          Erneut versuchen
         </button>
       </div>
     );
@@ -358,43 +393,56 @@ function HomePage() {
   // -- Result --------------------------------------------------------------
   const displayText = isTranslated ? translated : rawSummary;
   return (
-    <>
+    <div className="result-view">
       <div className="result-header">
-        <div>
-          <div className="result-title">
-            Clinical Summary
-            {isTranslated && <span className="translate-badge">EN</span>}
-          </div>
-          <div className="print-meta">Generated {generatedAt}</div>
+        <div className="result-title">
+          Befund-Karte
+          {isTranslated && <span className="translate-badge">EN</span>}
         </div>
         <div className="result-actions">
-          <button className="btn btn-ghost" onClick={() => window.print()} title="Download as PDF">
-            <DownloadIcon />
-            Download PDF
-          </button>
           <button className={`btn btn-ghost${copied ? " copied" : ""}`} onClick={handleCopy}>
             <CopyIcon />
-            {copied ? "Copied" : "Copy"}
+            {copied ? "Kopiert" : "Kopieren"}
           </button>
           <button className="btn btn-ghost" onClick={handleTranslate} disabled={translating}>
             <TranslateIcon />
             {translating
-              ? "Translating…"
+              ? "Übersetze…"
               : isTranslated
-                ? "Show original"
-                : "Translate to English"}
+                ? "Original anzeigen"
+                : "Ins Englische übersetzen"}
           </button>
           <button className="btn btn-primary" onClick={reset}>
-            Process another letter
+            Weiteren Brief verarbeiten
           </button>
         </div>
       </div>
-      <SummaryView text={displayText} />
-      <div className="print-footer">
-        hbar.health — Clinical Summary · Generated from an incoming letter. Draft
-        reading aid — verify against the original. No patient data is stored.
+
+      <BefundKarte text={displayText} generatedAt={generatedAt} />
+
+      <div className="workflow-actions">
+        <button className="btn btn-work" onClick={() => window.print()}>
+          <PrintIcon />
+          Drucken
+        </button>
+        <button
+          className="btn btn-work"
+          onClick={() => showToast("In die Patientenakte übernommen (Demo).")}
+        >
+          <FileIcon />
+          In Patientenakte übernehmen
+        </button>
+        <button
+          className="btn btn-work"
+          onClick={() => showToast("An laufendes Konsil weitergeleitet.")}
+        >
+          <ForwardIcon />
+          An Konsil weiterleiten
+        </button>
       </div>
-    </>
+
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
   );
 }
 

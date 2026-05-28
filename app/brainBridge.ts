@@ -96,20 +96,20 @@ export function llmComplete(messages: BridgeMessage[]): Promise<LlmResult> {
   });
 }
 
-/** Map a bridge error code to an English message for the UI. */
+/** Map a bridge error code to a German message for the UI. */
 export function bridgeErrorMessage(e: unknown): string {
   const code = e instanceof Error ? e.message : String(e);
   const map: Record<string, string> = {
     not_in_brain:
-      "This app must run inside a brain — it is not embedded in one.",
+      "Diese App muss innerhalb eines Brains laufen — sie ist derzeit nicht eingebettet.",
     permission_denied:
-      "The app is missing the 'llm.invoke' permission. Check it under Apps in the brain.",
+      "Der App fehlt die Berechtigung 'llm.invoke'. Bitte unter Apps im Brain prüfen.",
     permit_failed:
-      "The brain could not issue a permit (governance kernel unreachable).",
-    missing_messages: "Internal error: no input was passed to the brain.",
-    llm_complete_timeout: "The request to the brain timed out.",
-    llm_complete_network_error: "Network error while contacting the brain.",
-    llm_complete_failed: "The brain could not generate the summary.",
+      "Das Brain konnte keine Berechtigung erteilen (Governance-Kernel nicht erreichbar).",
+    missing_messages: "Interner Fehler: Es wurde keine Eingabe an das Brain übergeben.",
+    llm_complete_timeout: "Die Anfrage an das Brain hat das Zeitlimit überschritten.",
+    llm_complete_network_error: "Netzwerkfehler bei der Verbindung zum Brain.",
+    llm_complete_failed: "Das Brain konnte die Zusammenfassung nicht erstellen.",
   };
-  return map[code] || `Summary generation failed: ${code}`;
+  return map[code] || `Erstellung der Zusammenfassung fehlgeschlagen: ${code}`;
 }
