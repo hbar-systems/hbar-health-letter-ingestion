@@ -16,7 +16,7 @@ import { HashRouter, Routes, Route, NavLink, Link } from "react-router-dom";
 
 import { loadPdf, isThin, type LoadedPdf } from "./pdfExtract";
 import { ocrPdf } from "./ocr";
-import { summarizeLetter, translateSummary } from "./summarize";
+import { summarizeLetter, translateSummary, draftReply } from "./summarize";
 import { bridgeErrorMessage } from "./brainBridge";
 import { SECTIONS, parseSummary } from "./sections";
 import { AboutPage } from "./pages/AboutPage";
@@ -183,6 +183,13 @@ function HomePage() {
   const [generatedAt, setGeneratedAt] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState("");
+  // Paste-text intake (alternative to upload) + reply drafting.
+  const [pasteText, setPasteText] = useState("");
+  const [letterText, setLetterText] = useState("");
+  const [replyPoints, setReplyPoints] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [replyCopied, setReplyCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -200,6 +207,10 @@ function HomePage() {
     setTranslating(false);
     setCopied(false);
     setErrorMsg("");
+    setPasteText("");
+    setLetterText("");
+    setReplyPoints("");
+    setReplyText("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setView("upload");
   }, []);
@@ -259,6 +270,7 @@ function HomePage() {
       await pdf.destroy();
     }
 
+    setLetterText(letterText);
     setLoadingMsg("Klinische Zusammenfassung wird erstellt…");
     try {
       const summary = await summarizeLetter(letterText);
@@ -272,6 +284,56 @@ function HomePage() {
       setView("error");
     }
   }, []);
+
+  // Paste-text intake — summarize typed/pasted letter text (no PDF/OCR).
+  const processText = useCallback(async (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    setRawSummary("");
+    setTranslated("");
+    setIsTranslated(false);
+    setReplyText("");
+    setLetterText(t);
+    setLoadingMsg("Klinische Zusammenfassung wird erstellt…");
+    setView("loading");
+    try {
+      const summary = await summarizeLetter(t);
+      setRawSummary(summary);
+      setGeneratedAt(
+        new Date().toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })
+      );
+      setView("result");
+    } catch (e) {
+      setErrorMsg(bridgeErrorMessage(e));
+      setView("error");
+    }
+  }, []);
+
+  const handleReply = useCallback(async () => {
+    if (!letterText) return;
+    setReplyLoading(true);
+    try {
+      const r = await draftReply(letterText, replyPoints);
+      setReplyText(r);
+    } catch (e) {
+      setToast(bridgeErrorMessage(e));
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(""), 3000);
+    } finally {
+      setReplyLoading(false);
+    }
+  }, [letterText, replyPoints]);
+
+  const copyReply = async () => {
+    if (!replyText) return;
+    try {
+      await navigator.clipboard.writeText(replyText);
+      setReplyCopied(true);
+      setTimeout(() => setReplyCopied(false), 2000);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -326,7 +388,8 @@ function HomePage() {
       <div className="view-pad">
         <div className="upload-heading">Eingehender Brief</div>
         <div className="upload-subheading">
-          PDF hochladen, um eine strukturierte klinische Zusammenfassung zu erstellen.
+          PDF hochladen oder Text einfügen — für eine strukturierte Zusammenfassung
+          und, auf Wunsch, ein Antwortschreiben.
         </div>
         <div
           className={`drop-zone${dragOver ? " drag-over" : ""}`}
@@ -357,6 +420,39 @@ function HomePage() {
             an externe Dienste.
           </span>
         </div>
+
+        {/* Or paste the letter text directly (no upload needed). */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "1.5rem 0 0.75rem" }}>
+          <div style={{ flex: 1, height: 1, background: "rgba(127,127,127,0.3)" }} />
+          <span style={{ fontSize: "0.8rem", color: "#8a8a8a" }}>oder Text einfügen</span>
+          <div style={{ flex: 1, height: 1, background: "rgba(127,127,127,0.3)" }} />
+        </div>
+        <textarea
+          value={pasteText}
+          onChange={(e) => setPasteText(e.target.value)}
+          placeholder="Brieftext hier einfügen…"
+          style={{
+            width: "100%",
+            minHeight: 120,
+            padding: "0.6rem 0.7rem",
+            fontSize: "0.9rem",
+            borderRadius: 8,
+            boxSizing: "border-box",
+            resize: "vertical",
+            background: "rgba(127,127,127,0.08)",
+            color: "inherit",
+            border: "1px solid rgba(127,127,127,0.35)",
+            fontFamily: "inherit",
+          }}
+        />
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: "0.7rem" }}
+          disabled={!pasteText.trim()}
+          onClick={() => processText(pasteText)}
+        >
+          Text zusammenfassen
+        </button>
       </div>
     );
   }
@@ -439,6 +535,56 @@ function HomePage() {
           <ForwardIcon />
           An Konsil weiterleiten
         </button>
+      </div>
+
+      {/* Antwortschreiben — draft a reply to this letter (folded in from Praxis-Tools) */}
+      <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(127,127,127,0.25)", paddingTop: "1.25rem" }}>
+        <div style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.5rem" }}>
+          Antwortschreiben (optional)
+        </div>
+        <textarea
+          value={replyPoints}
+          onChange={(e) => setReplyPoints(e.target.value)}
+          placeholder="Stichpunkte für die Antwort (optional) — z. B. Termin bestätigt, Medikation angepasst…"
+          style={{
+            width: "100%",
+            minHeight: 70,
+            padding: "0.55rem 0.7rem",
+            fontSize: "0.88rem",
+            borderRadius: 8,
+            boxSizing: "border-box",
+            resize: "vertical",
+            background: "rgba(127,127,127,0.08)",
+            color: "inherit",
+            border: "1px solid rgba(127,127,127,0.35)",
+            fontFamily: "inherit",
+          }}
+        />
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: "0.6rem" }}
+          disabled={replyLoading}
+          onClick={handleReply}
+        >
+          {replyLoading ? "Erstelle Antwort…" : "Antwort entwerfen"}
+        </button>
+        {replyText && (
+          <div
+            style={{
+              marginTop: "1rem",
+              padding: "1rem 1.1rem",
+              background: "rgba(127,127,127,0.06)",
+              border: "1px solid rgba(127,127,127,0.25)",
+              borderRadius: 8,
+            }}
+          >
+            <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", lineHeight: 1.6 }}>{replyText}</div>
+            <button className="btn btn-ghost" style={{ marginTop: "0.6rem" }} onClick={copyReply}>
+              <CopyIcon />
+              {replyCopied ? "Kopiert" : "Antwort kopieren"}
+            </button>
+          </div>
+        )}
       </div>
 
       {toast && <div className="toast" role="status">{toast}</div>}

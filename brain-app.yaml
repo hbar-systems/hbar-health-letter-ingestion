@@ -20,8 +20,8 @@
 dialect: brain-app/v1
 id: hbar-health-letter-ingestion
 name: Eingangspost
-version: 0.2.0
-description: Reads an incoming PDF medical letter and returns a structured clinical summary — diagnoses, discharge medication, action required by the GP, flags. Draft reading aid; physician review required.
+version: 0.3.0
+description: Liest einen eingehenden Brief (PDF-Upload oder eingefügter Text) und erstellt eine strukturierte klinische Zusammenfassung — Diagnosen, Medikation, Procedere. Auf Wunsch ein Antwortschreiben-Entwurf. Nur Entwurf; ärztliche Prüfung erforderlich.
 license: AGPL-3.0
 
 author:

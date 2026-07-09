@@ -64,6 +64,24 @@ Regeln:
 - Verwende keinerlei Markdown-Formatierung — kein ##, kein **, kein *, kein _.
 - Nutze nur reinen Text und die exakten Abschnittsüberschriften oben.`;
 
+/** Build the reply-draft prompt: incoming letter + optional doctor bullets -> formal reply. */
+export function replyInstructions(letterText: string, points: string): string {
+  return `Du bist ein klinischer Dokumentenassistent für eine deutsche Hausarztpraxis. Formuliere einen kurzen, formellen Antwortbrief (Antwortschreiben) an den Absender des folgenden eingehenden Briefes.
+
+Regeln:
+- Verwende NUR Informationen aus dem eingehenden Brief und den Stichpunkten des Arztes. Erfinde nichts.
+- Formeller, kollegialer deutscher Briefstil (Anrede "Sehr geehrte Kollegin, sehr geehrter Kollege," bzw. namentlich falls im Brief genannt; Grußformel "Mit kollegialen Grüßen").
+- Kurz und sachlich. Keine neuen Diagnosen, Befunde oder Therapieempfehlungen erfinden.
+- Beginne den Text mit der Zeile: ENTWURF — ärztliche Prüfung und Freigabe erforderlich.
+- Keine Markdown-Formatierung (kein ##, **, *, _).
+
+Eingehender Brief:
+${letterText}
+
+Stichpunkte des Arztes für die Antwort:
+${points.trim() || "(keine — kurze Empfangsbestätigung und Rückmeldung an den Absender)"}`;
+}
+
 /** Build the translation prompt for a finished structured summary. */
 export function translateInstructions(summary: string): string {
   return (

@@ -7,7 +7,7 @@
  */
 
 import { llmComplete } from "./brainBridge";
-import { SUMMARIZE_INSTRUCTIONS, translateInstructions } from "./prompts";
+import { SUMMARIZE_INSTRUCTIONS, translateInstructions, replyInstructions } from "./prompts";
 
 /**
  * Summarize a letter. `letterText` is the text layer extracted client-side by
@@ -30,6 +30,17 @@ export async function summarizeLetter(letterText: string): Promise<string> {
 export async function translateSummary(summary: string): Promise<string> {
   const result = await llmComplete([
     { role: "user", content: translateInstructions(summary) },
+  ]);
+  return result.text;
+}
+
+/**
+ * Draft a formal reply to the incoming letter, using the letter text + optional
+ * doctor bullet points. Rejects with an Error whose message is a bridge code.
+ */
+export async function draftReply(letterText: string, points: string): Promise<string> {
+  const result = await llmComplete([
+    { role: "user", content: replyInstructions(letterText, points) },
   ]);
   return result.text;
 }
