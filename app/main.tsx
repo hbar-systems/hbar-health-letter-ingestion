@@ -21,6 +21,7 @@ import { bridgeErrorMessage } from "./brainBridge";
 import { SECTIONS, parseSummary } from "./sections";
 import { AboutPage } from "./pages/AboutPage";
 import { LegalPage } from "./pages/LegalPage";
+import { type Lang, type Strings, getStoredLang, storeLang, t } from "./i18n";
 import "./styles.css";
 
 // ---------------------------------------------------------------------------
@@ -111,13 +112,13 @@ function TranslateIcon() {
 // Summary rendering
 // ---------------------------------------------------------------------------
 
-function SectionContent({ body }: { body: string }) {
+function SectionContent({ body, s }: { body: string; s: Strings }) {
   const lines = body
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
   if (lines.length === 0) {
-    return <p className="empty">Nicht angegeben</p>;
+    return <p className="empty">{s.emptyValue}</p>;
   }
   return (
     <>
@@ -134,17 +135,27 @@ function SectionContent({ body }: { body: string }) {
  * for a discharge letter). If no section header is recognized at all, the raw
  * summary is shown verbatim inside the same card.
  */
-function BefundKarte({ text, generatedAt }: { text: string; generatedAt: string }) {
+function BefundKarte({
+  text,
+  generatedAt,
+  s,
+}: {
+  text: string;
+  generatedAt: string;
+  s: Strings;
+}) {
   const parsed = parseSummary(text);
-  const present = SECTIONS.filter((s) => parsed[s.key] !== undefined);
+  const present = SECTIONS.filter((sec) => parsed[sec.key] !== undefined);
 
   return (
     <div className="befund-karte">
       <div className="befund-head">
-        <h2 className="befund-header">
-          Eingehender Brief — strukturierte Zusammenfassung
-        </h2>
-        {generatedAt && <div className="befund-meta">Erstellt {generatedAt}</div>}
+        <h2 className="befund-header">{s.befundHeader}</h2>
+        {generatedAt && (
+          <div className="befund-meta">
+            {s.befundCreated} {generatedAt}
+          </div>
+        )}
       </div>
 
       {present.length === 0 ? (
@@ -152,11 +163,11 @@ function BefundKarte({ text, generatedAt }: { text: string; generatedAt: string 
           <div className="befund-content befund-raw">{text.trim()}</div>
         </div>
       ) : (
-        present.map((s) => (
-          <div key={s.key} className="befund-section">
-            <div className="befund-label">{s.label}</div>
+        present.map((sec) => (
+          <div key={sec.key} className="befund-section">
+            <div className="befund-label">{sec.label}</div>
             <div className="befund-content">
-              <SectionContent body={parsed[s.key]!} />
+              <SectionContent body={parsed[sec.key]!} s={s} />
             </div>
           </div>
         ))
@@ -171,9 +182,9 @@ function BefundKarte({ text, generatedAt }: { text: string; generatedAt: string 
 
 type View = "upload" | "loading" | "result" | "error";
 
-function HomePage() {
+function HomePage({ s }: { s: Strings }) {
   const [view, setView] = useState<View>("upload");
-  const [loadingMsg, setLoadingMsg] = useState("Brief wird analysiert…");
+  const [loadingMsg, setLoadingMsg] = useState(s.loadingAnalyzing);
   const [errorMsg, setErrorMsg] = useState("");
   const [rawSummary, setRawSummary] = useState("");
   const [translated, setTranslated] = useState("");
@@ -217,12 +228,12 @@ function HomePage() {
 
   const processFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setErrorMsg("Es werden nur PDF-Dateien akzeptiert. Bitte laden Sie eine .pdf-Datei hoch.");
+      setErrorMsg(s.errOnlyPdf);
       setView("error");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      setErrorMsg("Datei zu groß. Die maximale Größe beträgt 50 MB.");
+      setErrorMsg(s.errTooLarge);
       setView("error");
       return;
     }
@@ -230,14 +241,14 @@ function HomePage() {
     setRawSummary("");
     setTranslated("");
     setIsTranslated(false);
-    setLoadingMsg("PDF wird gelesen…");
+    setLoadingMsg(s.loadingReadingPdf);
     setView("loading");
 
     let pdf: LoadedPdf;
     try {
       pdf = await loadPdf(file);
     } catch {
-      setErrorMsg("Dieses PDF konnte nicht geöffnet werden. Die Datei ist möglicherweise beschädigt oder passwortgeschützt.");
+      setErrorMsg(s.errPdfOpen);
       setView("error");
       return;
     }
@@ -247,12 +258,11 @@ function HomePage() {
       const extracted = await pdf.extractText();
       if (extracted.tooThin) {
         // No usable text layer — scanned/image PDF. Fall back to on-device OCR.
-        setLoadingMsg("Gescanntes PDF — OCR wird vorbereitet…");
+        setLoadingMsg(s.loadingOcrPrep);
         letterText = await ocrPdf(
           pdf.numPages,
           (i) => pdf.renderPage(i),
-          ({ page, total }) =>
-            setLoadingMsg(`Gescanntes PDF — Seite ${page} von ${total} wird per OCR gelesen…`)
+          ({ page, total }) => setLoadingMsg(s.loadingOcrPage(page, total))
         );
         if (isThin(letterText)) throw new Error("ocr_empty");
       } else {
@@ -260,9 +270,7 @@ function HomePage() {
       }
     } catch (e) {
       const msg =
-        e instanceof Error && e.message === "ocr_empty"
-          ? "Es konnte kein lesbarer Text extrahiert werden, auch nicht per OCR. Der Scan ist möglicherweise zu schlecht oder die Seite leer."
-          : "Aus diesem PDF konnte kein Text extrahiert werden.";
+        e instanceof Error && e.message === "ocr_empty" ? s.errOcrEmpty : s.errNoText;
       setErrorMsg(msg);
       setView("error");
       return;
@@ -271,43 +279,43 @@ function HomePage() {
     }
 
     setLetterText(letterText);
-    setLoadingMsg("Klinische Zusammenfassung wird erstellt…");
+    setLoadingMsg(s.loadingSummarizing);
     try {
       const summary = await summarizeLetter(letterText);
       setRawSummary(summary);
       setGeneratedAt(
-        new Date().toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })
+        new Date().toLocaleString(s.locale, { dateStyle: "medium", timeStyle: "short" })
       );
       setView("result");
     } catch (e) {
-      setErrorMsg(bridgeErrorMessage(e));
+      setErrorMsg(bridgeErrorMessage(e, s));
       setView("error");
     }
-  }, []);
+  }, [s]);
 
   // Paste-text intake — summarize typed/pasted letter text (no PDF/OCR).
   const processText = useCallback(async (text: string) => {
-    const t = text.trim();
-    if (!t) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
     setRawSummary("");
     setTranslated("");
     setIsTranslated(false);
     setReplyText("");
-    setLetterText(t);
-    setLoadingMsg("Klinische Zusammenfassung wird erstellt…");
+    setLetterText(trimmed);
+    setLoadingMsg(s.loadingSummarizing);
     setView("loading");
     try {
-      const summary = await summarizeLetter(t);
+      const summary = await summarizeLetter(trimmed);
       setRawSummary(summary);
       setGeneratedAt(
-        new Date().toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })
+        new Date().toLocaleString(s.locale, { dateStyle: "medium", timeStyle: "short" })
       );
       setView("result");
     } catch (e) {
-      setErrorMsg(bridgeErrorMessage(e));
+      setErrorMsg(bridgeErrorMessage(e, s));
       setView("error");
     }
-  }, []);
+  }, [s]);
 
   const handleReply = useCallback(async () => {
     if (!letterText) return;
@@ -316,13 +324,13 @@ function HomePage() {
       const r = await draftReply(letterText, replyPoints);
       setReplyText(r);
     } catch (e) {
-      setToast(bridgeErrorMessage(e));
+      setToast(bridgeErrorMessage(e, s));
       if (toastTimer.current) clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToast(""), 3000);
     } finally {
       setReplyLoading(false);
     }
-  }, [letterText, replyPoints]);
+  }, [letterText, replyPoints, s]);
 
   const copyReply = async () => {
     if (!replyText) return;
@@ -375,7 +383,7 @@ function HomePage() {
       setTranslated(en);
       setIsTranslated(true);
     } catch (e) {
-      setErrorMsg(bridgeErrorMessage(e));
+      setErrorMsg(bridgeErrorMessage(e, s));
       setView("error");
     } finally {
       setTranslating(false);
@@ -386,11 +394,8 @@ function HomePage() {
   if (view === "upload") {
     return (
       <div className="view-pad">
-        <div className="upload-heading">Eingehender Brief</div>
-        <div className="upload-subheading">
-          PDF hochladen oder Text einfügen — für eine strukturierte Zusammenfassung
-          und, auf Wunsch, ein Antwortschreiben.
-        </div>
+        <div className="upload-heading">{s.uploadHeading}</div>
+        <div className="upload-subheading">{s.uploadSubheading}</div>
         <div
           className={`drop-zone${dragOver ? " drag-over" : ""}`}
           onDragOver={(e) => {
@@ -411,26 +416,23 @@ function HomePage() {
           <div className="drop-icon">
             <UploadIcon />
           </div>
-          <div className="drop-primary">PDF hier ablegen oder zum Auswählen klicken.</div>
+          <div className="drop-primary">{s.dropPrimary}</div>
         </div>
         <div className="file-note">
-          <span>Digitale PDFs werden direkt gelesen.</span>
-          <span>
-            Gescannte Briefe werden im Browser per OCR erkannt — keine Übertragung
-            an externe Dienste.
-          </span>
+          <span>{s.fileNote1}</span>
+          <span>{s.fileNote2}</span>
         </div>
 
         {/* Or paste the letter text directly (no upload needed). */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "1.5rem 0 0.75rem" }}>
           <div style={{ flex: 1, height: 1, background: "rgba(127,127,127,0.3)" }} />
-          <span style={{ fontSize: "0.8rem", color: "#8a8a8a" }}>oder Text einfügen</span>
+          <span style={{ fontSize: "0.8rem", color: "#8a8a8a" }}>{s.orPaste}</span>
           <div style={{ flex: 1, height: 1, background: "rgba(127,127,127,0.3)" }} />
         </div>
         <textarea
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
-          placeholder="Brieftext hier einfügen…"
+          placeholder={s.pastePlaceholder}
           style={{
             width: "100%",
             minHeight: 120,
@@ -451,7 +453,7 @@ function HomePage() {
           disabled={!pasteText.trim()}
           onClick={() => processText(pasteText)}
         >
-          Text zusammenfassen
+          {s.summarizeTextBtn}
         </button>
       </div>
     );
@@ -463,9 +465,7 @@ function HomePage() {
       <div className="view-loading">
         <div className="spinner" />
         <div className="loading-title">{loadingMsg}</div>
-        <div className="loading-sub">
-          Der Text wird in Ihrem Browser extrahiert; die Zusammenfassung erstellt Ihr Brain.
-        </div>
+        <div className="loading-sub">{s.loadingSub}</div>
       </div>
     );
   }
@@ -477,10 +477,10 @@ function HomePage() {
         <div className="error-icon">
           <ErrorIcon />
         </div>
-        <div className="error-title">Verarbeitung fehlgeschlagen</div>
+        <div className="error-title">{s.errorTitle}</div>
         <div className="error-message">{errorMsg}</div>
         <button className="btn btn-primary" onClick={reset}>
-          Erneut versuchen
+          {s.retryBtn}
         </button>
       </div>
     );
@@ -492,60 +492,60 @@ function HomePage() {
     <div className="result-view">
       <div className="result-header">
         <div className="result-title">
-          Befund-Karte
+          {s.resultTitle}
           {isTranslated && <span className="translate-badge">EN</span>}
         </div>
         <div className="result-actions">
           <button className={`btn btn-ghost${copied ? " copied" : ""}`} onClick={handleCopy}>
             <CopyIcon />
-            {copied ? "Kopiert" : "Kopieren"}
+            {copied ? s.copied : s.copy}
           </button>
           <button className="btn btn-ghost" onClick={handleTranslate} disabled={translating}>
             <TranslateIcon />
             {translating
-              ? "Übersetze…"
+              ? s.translating
               : isTranslated
-                ? "Original anzeigen"
-                : "Ins Englische übersetzen"}
+                ? s.showOriginal
+                : s.translateToEnglish}
           </button>
           <button className="btn btn-primary" onClick={reset}>
-            Weiteren Brief verarbeiten
+            {s.processAnother}
           </button>
         </div>
       </div>
 
-      <BefundKarte text={displayText} generatedAt={generatedAt} />
+      <BefundKarte text={displayText} generatedAt={generatedAt} s={s} />
 
       <div className="workflow-actions">
         <button className="btn btn-work" onClick={() => window.print()}>
           <PrintIcon />
-          Drucken
+          {s.printBtn}
         </button>
         <button
           className="btn btn-work"
-          onClick={() => showToast("In die Patientenakte übernommen (Demo).")}
+          onClick={() => showToast(s.toastAddedToRecord)}
         >
           <FileIcon />
-          In Patientenakte übernehmen
+          {s.addToRecord}
         </button>
         <button
           className="btn btn-work"
-          onClick={() => showToast("An laufendes Konsil weitergeleitet.")}
+          onClick={() => showToast(s.toastForwarded)}
         >
           <ForwardIcon />
-          An Konsil weiterleiten
+          {s.forwardToConsult}
         </button>
       </div>
 
       {/* Antwortschreiben — draft a reply to this letter (folded in from Praxis-Tools) */}
       <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(127,127,127,0.25)", paddingTop: "1.25rem" }}>
         <div style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-          Antwortschreiben (optional)
+          {s.replyHeading}
         </div>
         <textarea
           value={replyPoints}
           onChange={(e) => setReplyPoints(e.target.value)}
-          placeholder="Stichpunkte für die Antwort (optional) — z. B. Termin bestätigt, Medikation angepasst…"
+          placeholder={s.replyPlaceholder}
           style={{
             width: "100%",
             minHeight: 70,
@@ -566,7 +566,7 @@ function HomePage() {
           disabled={replyLoading}
           onClick={handleReply}
         >
-          {replyLoading ? "Erstelle Antwort…" : "Antwort entwerfen"}
+          {replyLoading ? s.replyDrafting : s.draftReplyBtn}
         </button>
         {replyText && (
           <div
@@ -581,7 +581,7 @@ function HomePage() {
             <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", lineHeight: 1.6 }}>{replyText}</div>
             <button className="btn btn-ghost" style={{ marginTop: "0.6rem" }} onClick={copyReply}>
               <CopyIcon />
-              {replyCopied ? "Kopiert" : "Antwort kopieren"}
+              {replyCopied ? s.copied : s.copyReply}
             </button>
           </div>
         )}
@@ -601,6 +601,15 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 function App() {
+  const [lang, setLang] = useState<Lang>(getStoredLang);
+  const s = t(lang);
+
+  const toggleLang = () => {
+    const next: Lang = lang === "de" ? "en" : "de";
+    setLang(next);
+    storeLang(next);
+  };
+
   return (
     <div className="app-shell">
       <header>
@@ -609,28 +618,34 @@ function App() {
         </Link>
         <div className="header-nav">
           <NavLink to="/" end className={navClass}>
-            Eingangspost
+            {s.navEingangspost}
           </NavLink>
           <NavLink to="/about" className={navClass}>
-            About
+            {s.navAbout}
           </NavLink>
           <NavLink to="/legal" className={navClass}>
-            Legal
+            {s.navLegal}
           </NavLink>
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={toggleLang}
+            title={s.langToggleTitle}
+          >
+            {lang === "de" ? "DE → EN" : "EN → DE"}
+          </button>
         </div>
       </header>
       <main>
         <div className="content-card">
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/legal" element={<LegalPage />} />
+            <Route path="/" element={<HomePage s={s} />} />
+            <Route path="/about" element={<AboutPage s={s} />} />
+            <Route path="/legal" element={<LegalPage s={s} />} />
           </Routes>
         </div>
       </main>
-      <footer>
-        Parsed locally · No patient data is stored or transmitted beyond this session
-      </footer>
+      <footer>{s.footer}</footer>
     </div>
   );
 }

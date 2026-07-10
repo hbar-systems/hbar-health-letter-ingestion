@@ -20,7 +20,7 @@
 dialect: brain-app/v1
 id: hbar-health-letter-ingestion
 name: Eingangspost
-version: 0.3.0
+version: 0.3.1
 description: Liest einen eingehenden Brief (PDF-Upload oder eingefügter Text) und erstellt eine strukturierte klinische Zusammenfassung. Auf Wunsch ein Antwortschreiben-Entwurf. Nur Entwurf; ärztliche Prüfung erforderlich.
 license: AGPL-3.0
 

@@ -1,57 +1,40 @@
 /** About page — what the app does, what it does not, how to use it safely. */
 
-export function AboutPage() {
+import type { Strings } from "../i18n";
+
+export function AboutPage({ s }: { s: Strings }) {
   return (
     <div className="doc-page">
-      <h1>About Eingangspost</h1>
-      <p className="doc-lead">
-        Letter ingestion for a German GP practice — read an incoming hospital
-        or specialist letter and get a structured clinical summary.
-      </p>
+      <h1>{s.aboutTitle}</h1>
+      <p className="doc-lead">{s.aboutLead}</p>
 
       <div className="doc-section">
-        <h2>What it does</h2>
+        <h2>{s.aboutDoesTitle}</h2>
         <ul>
-          <li>
-            Reads a PDF letter (Entlassbrief, Verlegungsbrief, Arztbrief) —
-            digital or scanned. Text is extracted in your browser, never
-            uploaded.
-          </li>
-          <li>
-            Scanned / image-only PDFs are read with on-device OCR
-            (tesseract.js, German) — also entirely in the browser.
-          </li>
-          <li>
-            Asks the brain to return a structured summary: patient, sender,
-            diagnoses, discharge medication, action required by the GP, flags.
-          </li>
-          <li>
-            Surfaces the two lines that matter most — Action Required and
-            Flags — as highlighted blocks.
-          </li>
-          <li>Translates a finished summary to English on request.</li>
+          <li>{s.aboutDoes1}</li>
+          <li>{s.aboutDoes2}</li>
+          <li>{s.aboutDoes3}</li>
+          <li>{s.aboutDoes4}</li>
+          <li>{s.aboutDoes5}</li>
         </ul>
       </div>
 
       <div className="doc-section">
-        <h2>What it does NOT do</h2>
+        <h2>{s.aboutNotTitle}</h2>
         <ul>
-          <li>Does not diagnose, triage, or make clinical decisions.</li>
-          <li>Does not store letters or summaries — nothing is persisted.</li>
-          <li>
-            Does not send anything to a CDN or third party — the OCR engine
-            and language model are bundled with the app.
-          </li>
-          <li>No chat, no free-form input.</li>
+          <li>{s.aboutNot1}</li>
+          <li>{s.aboutNot2}</li>
+          <li>{s.aboutNot3}</li>
+          <li>{s.aboutNot4}</li>
         </ul>
       </div>
 
       <div className="doc-section">
-        <h2>Safe usage</h2>
+        <h2>{s.aboutSafeTitle}</h2>
         <ul>
-          <li>Treat every summary as a draft — read it against the letter.</li>
-          <li>The Action Required block is a starting point, not a checklist.</li>
-          <li>Do not use real patient identifiers in this prototype.</li>
+          <li>{s.aboutSafe1}</li>
+          <li>{s.aboutSafe2}</li>
+          <li>{s.aboutSafe3}</li>
         </ul>
       </div>
     </div>
